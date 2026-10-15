@@ -132,6 +132,7 @@ jobs:
           claude_args: |
             --model us.anthropic.claude-opus-5-5
             --add-dir /tmp
+            --permission-mode acceptEdits
             --allowedTools "Edit,Glob,Grep,LS,Read,Write,Bash(git *),Bash(gh *),Bash(cmake *),Bash(*cmake *),Bash(clang-format *),Bash(*/ispc *),Bash(./build/*),Bash(build/*),Bash(*run_tests.py *),Bash(python3 *),Bash(curl *),Bash(jq *),Bash(rm *),Bash(ls *),Bash(mkdir *),Bash(cp *),Bash(mv *),Bash(touch *),Bash(diff *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(grep *),Bash(echo *),Bash(printf *),Bash(pwd *),Bash(which *),Bash(realpath *),Bash(llvm-* *),Bash(opt *),Bash(llc *),Bash(FileCheck *)"
 
       # Fork debug only: keep the full Claude transcript to see denied commands.
