@@ -43,7 +43,7 @@ Don't open a PR. A maintainer opens it manually from the branch.
    Run clang-format on changed C/C++ files before testing. If combined validation fails,
    make ONE narrowly justified repair attempt, then repeat the affected validation.
    If genuine code/test failures remain, publish the branch for review and clearly state
-   VALIDATION FAILED in the run summary and prepared PR body. Don't claim failed tests passed.
+   VALIDATION FAILED in your final message and prepared PR body. Don't claim failed tests passed.
    Tool/setup failures, timeout or incomplete integration do not authorize publication.
    Preserve pending fixes; don't remove unrelated tests or weaken assertions to pass.
    If no new fix was accepted or there are no new code changes, stop without pushing.
@@ -71,5 +71,5 @@ Don't open a PR. A maintainer opens it manually from the branch.
    URL-encode the body with jq and provide this link for a maintainer:
    https://github.com/ispc/ispc/compare/main...codeql/fixes?expand=1&body=ENCODED_BODY
 
-   Write the link, included alerts, omitted alerts with reasons, and combined
-   validation to $GITHUB_STEP_SUMMARY and your final message. Do not create a PR.
+   Give the link, included alerts, omitted alerts with reasons, and combined
+   validation in your final message; the job summary shows it. Do not create a PR.

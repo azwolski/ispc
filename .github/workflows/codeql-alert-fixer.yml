@@ -115,7 +115,8 @@ jobs:
           --model us.anthropic.claude-opus-5-5
           --add-dir ${{ runner.temp }}/codeql-input
           --add-dir ${{ runner.temp }}/codeql-result
-          --allowedTools "Edit,Glob,Grep,LS,Read,Write,Bash(git *),Bash(cmake *),Bash(*cmake *),Bash(clang-format *),Bash(*/ispc *),Bash(./build/*),Bash(build/*),Bash(*run_tests.py *),Bash(jq *),Bash(ls *),Bash(mkdir *),Bash(cp *),Bash(diff *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(llvm-* *),Bash(opt *),Bash(llc *),Bash(FileCheck *)"
+          --add-dir /tmp
+          --allowedTools "Edit,Glob,Grep,LS,Read,Write,Bash(git *),Bash(cmake *),Bash(*cmake *),Bash(clang-format *),Bash(*/ispc *),Bash(./build/*),Bash(build/*),Bash(*run_tests.py *),Bash(jq *),Bash(ls *),Bash(mkdir *),Bash(cp *),Bash(diff *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(grep *),Bash(which *),Bash(echo *),Bash(printf *),Bash(llvm-* *),Bash(opt *),Bash(llc *),Bash(FileCheck *)"
 
     # Fork debug only: keep the full Claude transcript to see denied commands.
     - name: Upload the Claude execution log
