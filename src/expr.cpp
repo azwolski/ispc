@@ -1336,10 +1336,18 @@ llvm::Value *UnaryExpr::GetValue(FunctionEmitContext *ctx) const {
         return lEmitNegate(expr, pos, ctx, wrapSemantics);
     case LogicalNot: {
         llvm::Value *argVal = expr->GetValue(ctx);
+        if (argVal == nullptr) {
+            AssertPos(pos, m->errorCount > 0);
+            return nullptr;
+        }
         return ctx->NotOperator(argVal, llvm::Twine(argVal->getName()) + "_logicalnot");
     }
     case BitNot: {
         llvm::Value *argVal = expr->GetValue(ctx);
+        if (argVal == nullptr) {
+            AssertPos(pos, m->errorCount > 0);
+            return nullptr;
+        }
         return ctx->NotOperator(argVal, llvm::Twine(argVal->getName()) + "_bitnot");
     }
     default:
