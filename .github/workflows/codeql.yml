@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 240
     # Disabling this workflow for non ispc/ispc repo.
-    if: github.repository == 'ispc/ispc'
+    if: github.repository == 'azwolski/ispc'
     permissions:
       security-events: write
       contents: read
