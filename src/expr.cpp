@@ -1236,6 +1236,12 @@ static llvm::Value *lEmitPrePostIncDec(UnaryExpr::Op op, Expr *expr, SourcePos p
         return nullptr;
     }
 
+    if (rvalue == nullptr) {
+        // An error has already been reported while emitting the value
+        // (e.g., an impossible gather).
+        return nullptr;
+    }
+
     // Emit code to do the appropriate addition/subtraction to the
     // expression's old value
     ctx->SetDebugPos(pos);
