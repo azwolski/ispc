@@ -199,25 +199,13 @@ function(builtin_wasm_to_cpp bit os arch)
 endfunction()
 
 function(get_android_ndk_sysroot os out)
-    set(ndk_roots "")
     if (ISPC_ANDROID_NDK_PATH)
-        set(ndk_roots "${ISPC_ANDROID_NDK_PATH}")
+        set(ndk_root "${ISPC_ANDROID_NDK_PATH}")
     else()
-        foreach(ndk_env ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK_LATEST_HOME)
-            if (DEFINED ENV{${ndk_env}})
-                list(APPEND ndk_roots "$ENV{${ndk_env}}")
-            endif()
-        endforeach()
-        foreach(sdk_env ANDROID_HOME ANDROID_SDK_ROOT)
-            if (DEFINED ENV{${sdk_env}})
-                file(GLOB installed_ndks "$ENV{${sdk_env}}/ndk/*")
-                list(SORT installed_ndks ORDER DESCENDING)
-                list(APPEND ndk_roots ${installed_ndks} "$ENV{${sdk_env}}/ndk-bundle")
-            endif()
-        endforeach()
+        set(ndk_root "$ENV{ANDROID_NDK_HOME}")
     endif()
 
-    foreach(ndk_root IN LISTS ndk_roots)
+    if (ndk_root)
         file(GLOB modern_sysroots "${ndk_root}/toolchains/llvm/prebuilt/*/sysroot")
         foreach(sysroot "${ndk_root}/sysroot" ${modern_sysroots} "${ndk_root}")
             if (EXISTS "${sysroot}/usr/include/stdio.h")
@@ -225,11 +213,11 @@ function(get_android_ndk_sysroot os out)
                 return()
             endif()
         endforeach()
-    endforeach()
+    endif()
 
     string(TOUPPER ${os} os_upper)
     message(FATAL_ERROR "C builtins for ${os} require Android NDK headers on this host. "
-                        "Set -DISPC_ANDROID_NDK_PATH=<NDK root> or disable this OS with "
+                        "Set -DISPC_ANDROID_NDK_PATH=<NDK root> or ANDROID_NDK_HOME, or disable this OS with "
                         "-DISPC_${os_upper}_TARGET=OFF.")
 endfunction()
 
@@ -270,8 +258,9 @@ function (get_target_flags os arch out)
     elseif (${os} STREQUAL "macos")
         set(triple ${arch}-apple-macosx)
     elseif (${os} STREQUAL "android")
-        # Bionic headers reject unversioned triples. Use the API level of an Android host, or 21,
-        # the lowest one the NDK supports.
+        # Without an API level, the NDK headers assume the newest one, so the builtins would need
+        # symbols that older devices lack (e.g. stdout, API 23+). Use the API level of an Android
+        # host, or 21, the lowest one the NDK supports.
         set(android_api 21)
         if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Android" AND CMAKE_SYSTEM_VERSION MATCHES "^[0-9]+$"
                 AND CMAKE_SYSTEM_VERSION GREATER_EQUAL 21)

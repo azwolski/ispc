@@ -15,10 +15,10 @@ RUN if [ -v http_proxy ]; then echo "proxy=$http_proxy" >> /etc/dnf/dnf.conf; fi
 
 # Packages required to build ISPC.
 # Fedora 44 provides LLVM 22 and TBB 2021.x (libtbb.so.12) as system libraries
-RUN dnf install -y git cmake python3-setuptools python3-devel wget dnf-plugins-core binutils tar xz && \
+RUN dnf install -y git cmake python3-setuptools python3-devel wget dnf-plugins-core && \
     dnf install -y clang-devel llvm-devel glibc-devel.i686 && \
     dnf install -y flex bison tbb-devel && \
-    dnf clean all
+    dnf clean -y all
 
 # If you are behind a proxy, you need to configure git to use it.
 RUN if [ -v http_proxy ]; then git config --global --add http.proxy "$http_proxy"; fi
@@ -36,10 +36,11 @@ USER ispc_user
 
 # Clone, configure and build ISPC
 # Some check-all tests may fail because we use system LLVM here
+# Fedora has no ARM32 glibc headers and keeps its AArch64 headers in a sysroot
+# that the build does not search, so build without ARM.
 RUN git clone https://github.com/$REPO.git ispc && \
     git -C ispc checkout $SHA && \
-    python3 ispc/scripts/install_cross_headers.py --skip-ndk --linux-arm-headers && \
-    cmake ispc -B build-ispc -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake ispc -B build-ispc -DCMAKE_INSTALL_PREFIX=/usr/local -DARM_ENABLED=OFF && \
     cmake --build build-ispc -v -j "$(nproc)" && \
     (cmake --build build-ispc --target check-all || true) && \
     (echo "shared libs deps of ispc" && ldd ./build-ispc/bin/ispc) && \

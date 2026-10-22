@@ -422,6 +422,9 @@ Examples:
   # Build with specific LLVM version
   $ python quick-start-build.py 19
 
+  # Build with extra CMake options (used only when the build directory is created)
+  $ python quick-start-build.py -DARM32_ENABLED=OFF
+
   # Build with custom LLVM location
   $ LLVM_HOME=/path/to/llvm python quick-start-build.py
 
@@ -435,7 +438,8 @@ Examples:
 
     parser.add_argument("llvm_version", type=str, nargs="?", default="23.1.2",
                         help="LLVM version to use (default: 23.1.2)")
-    args = parser.parse_args()
+    # Unknown arguments, such as -D options, are passed to CMake.
+    args, cmake_args = parser.parse_known_args()
 
     # Set up default values and paths
     llvm_version = args.llvm_version
@@ -499,7 +503,8 @@ Examples:
             "-B", str(build_dir),
             str(ispc_root),
             f"-DCMAKE_BUILD_TYPE={build_type}",
-            "-DISPC_SLIM_BINARY=ON"
+            "-DISPC_SLIM_BINARY=ON",
+            *cmake_args
         ]
         print("Configure build of ISPC")
         run_command(configure_cmd,

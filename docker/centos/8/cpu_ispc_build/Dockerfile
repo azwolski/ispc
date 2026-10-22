@@ -81,9 +81,6 @@ SHELL ["/bin/bash", "-c"]
 
 RUN dnf -y update && dnf install -y m4 bison flex && dnf clean -y all
 
-RUN python3.8 scripts/install_cross_headers.py --linux-arm-headers
-ENV ANDROID_NDK_HOME=/usr/local/share/android-ndk
-
 # Create new non-root user and switch to it
 RUN useradd -m -d /home/ispc_user -s /bin/bash -U ispc_user && \
     chown -R ispc_user:ispc_user /usr
@@ -91,12 +88,15 @@ RUN useradd -m -d /home/ispc_user -s /bin/bash -U ispc_user && \
 USER ispc_user
 
 # Build ISPC
+# Rocky Linux 8 has no ARM or Android C library headers, so build without those targets.
 WORKDIR /usr/local/src/ispc
 RUN cmake . \
         -B build \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
         -DISPC_PREPARE_PACKAGE=ON \
-        -DISPC_CROSS=ON && \
+        -DISPC_CROSS=ON \
+        -DARM_ENABLED=OFF \
+        -DISPC_ANDROID_TARGET=OFF && \
     cmake --build build --target package -j"$(nproc)" && \
     cmake --build build --target check-all && \
     cmake --install build && \

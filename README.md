@@ -144,13 +144,9 @@ On Debian/Ubuntu, install `libc6-dev-armhf-cross` and `libc6-dev-arm64-cross`, o
 disable ARM support with `-DARM_ENABLED=OFF` (only 32-bit ARM with
 `-DARM32_ENABLED=OFF`). Configuration checks the C builtin
 headers before the build starts. For Android target libraries on Linux, provide
-`-DISPC_ANDROID_NDK_PATH=<NDK root>` or an installed NDK through the Android SDK
-environment variables; `-DISPC_ANDROID_TARGET=OFF` disables those libraries.
+`-DISPC_ANDROID_NDK_PATH=<NDK root>` or set `ANDROID_NDK_HOME`;
+`-DISPC_ANDROID_TARGET=OFF` disables those libraries.
 Native Termux builds use the installed bionic headers.
-
-macOS cross builds also use Android NDK headers for Linux builtin libraries.
-These headers belong to bionic; compatibility of these libraries with glibc
-remains an existing limitation of that build configuration.
 
 ## Additional Resources
 
