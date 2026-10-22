@@ -370,46 +370,6 @@ function(builtin_to_cpp bit os generic_arch)
         -I${CMAKE_SOURCE_DIR} -m${bit} -nostdinc++ --std=gnu++17
     )
 
-    # Check the actual builtin compiler and target headers before starting the build.
-    # CMake's host C++ compiler may be different from the clang used to emit bitcode.
-    execute_process(
-        COMMAND ${CLANGPP_EXECUTABLE} ${flags} -fsyntax-only ${CMAKE_SOURCE_DIR}/${input}
-        RESULT_VARIABLE builtin_check_result
-        ERROR_VARIABLE builtin_check_error
-        OUTPUT_QUIET
-    )
-    if (NOT "${builtin_check_result}" STREQUAL "0")
-        if (${arch} STREQUAL "armv8a")
-            set(disable_arch "-DARM32_ENABLED=OFF")
-            set(header_package "libc6-dev-armhf-cross")
-        elseif (${arch} STREQUAL "aarch64")
-            set(disable_arch "-DARM_ENABLED=OFF")
-            set(header_package "libc6-dev-arm64-cross")
-        elseif (${generic_arch} STREQUAL "x86")
-            set(disable_arch "-DX86_ENABLED=OFF")
-            set(header_package "g++-multilib")
-        elseif (${generic_arch} STREQUAL "riscv")
-            set(disable_arch "-DRISCV_ENABLED=OFF")
-            set(header_package "libc6-dev-riscv64-cross")
-        else()
-            set(disable_arch "-DPPC64_ENABLED=OFF")
-            set(header_package "libc6-dev-ppc64el-cross")
-        endif()
-        set(header_help "Install matching target libc development headers/sysroot, or use ${disable_arch}.")
-        if (${os} STREQUAL "windows")
-            set(header_help "Check the Windows SDK/CRT installation, ISPC_WINDOWS_SDK_PATH and ISPC_WINDOWS_VCTOOLS_PATH, or use -DISPC_WINDOWS_TARGET=OFF.")
-        elseif (${os} STREQUAL "linux" AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-            if ((${arch} STREQUAL "aarch64" AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-                    OR (${arch} STREQUAL "armv8a" AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^armv[0-9]"))
-                set(header_package "libc6-dev")
-            endif()
-            string(APPEND header_help " On Debian/Ubuntu, install ${header_package}.")
-        elseif (${os} STREQUAL "android" AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android")
-            string(APPEND header_help " Check ISPC_ANDROID_NDK_PATH, or use -DISPC_ANDROID_TARGET=OFF.")
-        endif()
-        message(FATAL_ERROR "Cannot compile C builtins for ${os}/${arch}:\n${builtin_check_error}\n${header_help}")
-    endif()
-
     set(name builtins-cpp-${bit}-${os}-${arch})
     string(REPLACE "-" "_" name ${name})
     set(cpp ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${name}.cpp)

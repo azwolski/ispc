@@ -142,8 +142,7 @@ for build and test instructions.
 Linux builds with ARM support need the corresponding libc development headers.
 On Debian/Ubuntu, install `libc6-dev-armhf-cross` and `libc6-dev-arm64-cross`, or
 disable ARM support with `-DARM_ENABLED=OFF` (only 32-bit ARM with
-`-DARM32_ENABLED=OFF`). Configuration checks the C builtin
-headers before the build starts. For Android target libraries on Linux, provide
+`-DARM32_ENABLED=OFF`). For Android target libraries on Linux, provide
 `-DISPC_ANDROID_NDK_PATH=<NDK root>` or set `ANDROID_NDK_HOME`;
 `-DISPC_ANDROID_TARGET=OFF` disables those libraries.
 Native Termux builds use the installed bionic headers.
