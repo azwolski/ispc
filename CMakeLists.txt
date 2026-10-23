@@ -251,7 +251,7 @@ if (NOT WIN32 AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android"
     file(GLOB ISPC_ANDROID_NDK_SYSROOT "${ISPC_ANDROID_NDK_PATH}/sysroot"
         "${ISPC_ANDROID_NDK_PATH}/toolchains/llvm/prebuilt/*/sysroot")
     if (NOT ISPC_ANDROID_NDK_PATH OR NOT ISPC_ANDROID_NDK_SYSROOT)
-        message (FATAL_ERROR "Set ISPC_ANDROID_NDK_PATH variable (or ANDROID_NDK_HOME) to an Android NDK for cross compilation to Linux/Android e.g. /opt/android-ndk-r27d, or disable Android with -DISPC_ANDROID_TARGET=OFF")
+        message (FATAL_ERROR "Set ISPC_ANDROID_NDK_PATH variable for cross compilation to Linux/Android e.g. /opt/android-ndk-r27d")
     endif()
     list(GET ISPC_ANDROID_NDK_SYSROOT 0 ISPC_ANDROID_NDK_SYSROOT)
     message(STATUS "Using Android NDK sysroot ${ISPC_ANDROID_NDK_SYSROOT}")
