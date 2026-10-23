@@ -240,6 +240,23 @@ else()
     set(ISPC_UNIX_TARGET OFF)
 endif()
 
+# Android targets, and Linux targets on macOS, use the C headers from the Android NDK.
+if (NOT WIN32 AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android"
+    AND ((ISPC_ANDROID_TARGET AND (X86_ENABLED OR ARM_ENABLED)) OR (APPLE AND ISPC_LINUX_TARGET)))
+    if (NOT ISPC_ANDROID_NDK_PATH)
+        # Use standard Android NDK location if this is not specified.
+        set(ISPC_ANDROID_NDK_PATH "$ENV{ANDROID_NDK_HOME}")
+    endif()
+    # Old NDKs have the headers in <NDK>/sysroot, new NDKs only in the toolchain sysroot.
+    file(GLOB ISPC_ANDROID_NDK_SYSROOT "${ISPC_ANDROID_NDK_PATH}/sysroot"
+        "${ISPC_ANDROID_NDK_PATH}/toolchains/llvm/prebuilt/*/sysroot")
+    if (NOT ISPC_ANDROID_NDK_PATH OR NOT ISPC_ANDROID_NDK_SYSROOT)
+        message (FATAL_ERROR "Set ISPC_ANDROID_NDK_PATH variable (or ANDROID_NDK_HOME) to an Android NDK for cross compilation to Linux/Android e.g. /opt/android-ndk-r27d, or disable Android with -DISPC_ANDROID_TARGET=OFF")
+    endif()
+    list(GET ISPC_ANDROID_NDK_SYSROOT 0 ISPC_ANDROID_NDK_SYSROOT)
+    message(STATUS "Using Android NDK sysroot ${ISPC_ANDROID_NDK_SYSROOT}")
+endif()
+
 if (APPLE)
     # Use standard macOS SDK location if this is not specified.
     if (NOT ISPC_MACOS_SDK_PATH)

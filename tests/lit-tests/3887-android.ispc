@@ -1,7 +1,7 @@
 // Android C builtins must contain their runtime implementations. Incorrect
 // header lookup used to silently produce empty modules.
 // RUN: %{ispc} %s --arch=aarch64 --target=neon-i32x4 --target-os=android --nowrap --emit-llvm-text -o - | FileCheck %s
-// REQUIRES: ARM_ENABLED, ANDROID_ENABLED
+// REQUIRES: ARM_ENABLED && ANDROID_ENABLED
 
 // CHECK-DAG: define {{.*}}@__do_print(
 // CHECK-DAG: define {{.*}}@__num_cores(

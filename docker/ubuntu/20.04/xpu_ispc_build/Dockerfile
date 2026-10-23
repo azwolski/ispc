@@ -9,8 +9,6 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG REPO=ispc/ispc
 ARG SHA=main
-ENV ANDROID_NDK_HOME=/usr/local/share/android-ndk
-
 ARG LTO=OFF
 
 # !!! Make sure that your docker config provides enough memory to the container,
@@ -64,6 +62,15 @@ RUN set -eux && wget -qO - https://repositories.intel.com/graphics/intel-graphic
 
 WORKDIR /home/src
 
+# Install the Android NDK C headers for the Android target builtins (no NDK tools).
+RUN apt-get -y update && apt-get --no-install-recommends install -y unzip && \
+    rm -rf /var/lib/apt/lists/* && \
+    wget -q --retry-connrefused --waitretry=5 --read-timeout=20 --timeout=15 -t 5 \
+        https://dl.google.com/android/repository/android-ndk-r27d-linux.zip && \
+    unzip -q android-ndk-r27d-linux.zip 'android-ndk-r27d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/*' \
+        -d /usr/local/share && \
+    rm android-ndk-r27d-linux.zip
+
 # Create new non-root user and switch to it
 RUN useradd -m -d /home/ispc_user -s /bin/bash -U ispc_user && \
     chown -R ispc_user:ispc_user /home/src && \
@@ -76,13 +83,13 @@ RUN git clone https://github.com/$REPO.git ispc
 WORKDIR /home/src/ispc
 # Build Clang/LLVM, XE dependencies and then ISPC.
 RUN git checkout $SHA && \
-    python3 scripts/install_cross_headers.py && \
     cmake superbuild \
         -B build \
         --preset os \
         -DLTO=$LTO \
         -DINSTALL_ISPC=ON \
         -DINSTALL_TOOLCHAIN=ON \
+        -DISPC_ANDROID_NDK_PATH=/usr/local/share/android-ndk-r27d \
         -DCMAKE_INSTALL_PREFIX=/usr/local && \
     cmake --build build && \
     (cmake --build build --target ispc-stage2-check-all || true) && \

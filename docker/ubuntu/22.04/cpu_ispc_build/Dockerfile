@@ -82,9 +82,14 @@ RUN apt-get -y update && \
 
 WORKDIR /usr/local/src
 
-# Install only the pinned NDK C headers; no NDK host binaries are used.
-RUN python3 ispc/scripts/install_cross_headers.py
-ENV ANDROID_NDK_HOME=/usr/local/share/android-ndk
+# Install the Android NDK C headers for the Android target builtins (no NDK tools).
+RUN apt-get -y update && apt-get --no-install-recommends install -y unzip && \
+    rm -rf /var/lib/apt/lists/* && \
+    wget -q --retry-connrefused --waitretry=5 --read-timeout=20 --timeout=15 -t 5 \
+        https://dl.google.com/android/repository/android-ndk-r27d-linux.zip && \
+    unzip -q android-ndk-r27d-linux.zip 'android-ndk-r27d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/*' \
+        -d /usr/local/share && \
+    rm android-ndk-r27d-linux.zip
 
 # Create new non-root user and switch to it
 RUN useradd -m -d /home/ispc_user -s /bin/bash -U ispc_user && \
@@ -102,6 +107,7 @@ RUN cmake ispc/superbuild \
         -DXE_DEPS=OFF \
         -DCMAKE_CXX_FLAGS=-Werror \
         -DPREBUILT_STAGE2_PATH="$LLVM_HOME"/bin-"$LLVM_VERSION" \
+        -DISPC_ANDROID_NDK_PATH=/usr/local/share/android-ndk-r27d \
         -DCMAKE_INSTALL_PREFIX=/usr/local/src/ispc/bin-"$LLVM_VERSION" && \
     cmake --build build -j"$(nproc)" && \
     cmake --build build --target ispc-stage2-check-all && \

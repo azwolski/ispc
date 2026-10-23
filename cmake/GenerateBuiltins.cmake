@@ -198,29 +198,6 @@ function(builtin_wasm_to_cpp bit os arch)
     set(COMMON_BUILTIN_BC_FILES ${tmp_list_bc} PARENT_SCOPE)
 endfunction()
 
-function(get_android_ndk_sysroot os out)
-    if (ISPC_ANDROID_NDK_PATH)
-        set(ndk_root "${ISPC_ANDROID_NDK_PATH}")
-    else()
-        set(ndk_root "$ENV{ANDROID_NDK_HOME}")
-    endif()
-
-    if (ndk_root)
-        file(GLOB modern_sysroots "${ndk_root}/toolchains/llvm/prebuilt/*/sysroot")
-        foreach(sysroot "${ndk_root}/sysroot" ${modern_sysroots} "${ndk_root}")
-            if (EXISTS "${sysroot}/usr/include/stdio.h")
-                set(${out} "${sysroot}" PARENT_SCOPE)
-                return()
-            endif()
-        endforeach()
-    endif()
-
-    string(TOUPPER ${os} os_upper)
-    message(FATAL_ERROR "C builtins for ${os} require Android NDK headers on this host. "
-                        "Set -DISPC_ANDROID_NDK_PATH=<NDK root> or ANDROID_NDK_HOME, or disable this OS with "
-                        "-DISPC_${os_upper}_TARGET=OFF.")
-endfunction()
-
 function (get_target_flags os arch out)
     # Determine triple
     set(fpic "")
@@ -258,15 +235,7 @@ function (get_target_flags os arch out)
     elseif (${os} STREQUAL "macos")
         set(triple ${arch}-apple-macosx)
     elseif (${os} STREQUAL "android")
-        # Without an API level, the NDK headers assume the newest one, so the builtins would need
-        # symbols that older devices lack (e.g. stdout, API 23+). Use the API level of an Android
-        # host, or 21, the lowest one the NDK supports.
-        set(android_api 21)
-        if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Android" AND CMAKE_SYSTEM_VERSION MATCHES "^[0-9]+$"
-                AND CMAKE_SYSTEM_VERSION GREATER_EQUAL 21)
-            set(android_api ${CMAKE_SYSTEM_VERSION})
-        endif()
-        set(triple ${arch}-unknown-linux-android${android_api})
+        set(triple ${arch}-unknown-linux-android)
         set(fpic -fPIC)
     elseif (${os} STREQUAL "ios")
         set(triple ${arch}-apple-ios)
@@ -284,17 +253,15 @@ function (get_target_flags os arch out)
     if (${os} STREQUAL "windows" AND NOT WIN32)
         set(include -isystem${ISPC_WINDOWS_VCTOOLS_PATH}/include -isystem${ISPC_WINDOWS_SDK_PATH}/include/ucrt)
     elseif (NOT WIN32 AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android"
-            AND (${os} STREQUAL "android" OR (APPLE AND (${os} STREQUAL "linux" OR ${os} STREQUAL "freebsd"))))
-        get_android_ndk_sysroot(${os} android_sysroot)
-        # Keep the destination triple for macOS Unix cross targets using NDK headers.
-        # Android triples below API 23 redirect stdout to __sF, which glibc does not export.
+            AND (${os} STREQUAL "android" OR (APPLE AND ${os} STREQUAL "linux")))
+        # macOS has no Linux C library headers, so Linux targets use the NDK headers there too.
         if (${arch} STREQUAL "armv8a")
             set(ndk_arch arm-linux-androideabi)
         else()
             set(ndk_arch ${arch}-linux-android)
         endif()
-        set(include --sysroot=${android_sysroot} -isystem${android_sysroot}/usr/include
-                    -isystem${android_sysroot}/usr/include/${ndk_arch})
+        set(include --sysroot=${ISPC_ANDROID_NDK_SYSROOT} -isystem${ISPC_ANDROID_NDK_SYSROOT}/usr/include
+                    -isystem${ISPC_ANDROID_NDK_SYSROOT}/usr/include/${ndk_arch})
     elseif (WIN32)
         if (${os} STREQUAL "windows")
             set(include "")

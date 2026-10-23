@@ -4,7 +4,7 @@
 
 // RUN: %{ispc} %s --arch=aarch64 --target=neon-i32x4 --target-os=linux --nowrap --emit-llvm-text -o - | FileCheck %s %{linux_stdio_checks}
 
-// REQUIRES: ARM_ENABLED, LINUX_ENABLED
+// REQUIRES: ARM_ENABLED && LINUX_ENABLED
 
 // CHECK: define {{.*}}@__do_print(
 // CHECK: define {{.*}}@__num_cores(
