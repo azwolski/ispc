@@ -148,8 +148,8 @@ On Linux, Linux and FreeBSD targets need these C library packages:
 - 32-bit ARM: `libc6-dev-armhf-cross` on Debian/Ubuntu. `-DARM32_ENABLED=OFF`
   disables only 32-bit ARM.
 
-`-DISPC_CROSS=ON` enables cross targets. They use the C headers from an SDK; if
-the SDK is not found, its targets are disabled:
+`-DISPC_CROSS=ON` enables cross targets. They use the C headers from an SDK.
+If no SDK is given, its targets are disabled. A given SDK path must exist.
 
 - Android, and Linux on macOS: the Android NDK, from
   `-DISPC_ANDROID_NDK_PATH=<NDK root>` or `ANDROID_NDK_HOME`.
