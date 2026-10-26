@@ -44,7 +44,6 @@ set(BUILD_TYPE_LLVM "Release" CACHE STRING "Set the build type for LLVM build")
 set(BUILD_TYPE_SPIRV_TRANSLATOR "Release" CACHE STRING "Set the build type for SPIR-V Translator build")
 set(BUILD_TYPE_VC_INTRINSICS "Release" CACHE STRING "Set the build type for VC Intrinsics build")
 set(BUILD_TYPE_L0 "Release" CACHE STRING "Set the build type for L0 build")
-set(ISPC_ANDROID_NDK_PATH "NO" CACHE STRING "Path to Android NDK. It is needed to ISPC_CROSS=ON on Linux and macOS.")
 set(ISPC_WINDOWS_SDK_PATH "NO" CACHE STRING "Path to Windows SDK. It is needed to ISPC_CROSS=ON on Linux.")
 set(ISPC_WINDOWS_VCTOOLS_PATH "NO" CACHE STRING "Path to Windows VC Tools. It is needed to ISPC_CROSS=ON on Linux.")
 set(ISPC_SIGN_KEY "NO" CACHE STRING "Key to sign macOS or Windows build.")
@@ -324,7 +323,6 @@ message(STATUS "PREBUILT_XE_STAGE2_PATH is ${PREBUILT_XE_STAGE2_PATH}")
 message(STATUS "EXTERNAL_VERBOSE is ${EXTERNAL_VERBOSE}")
 message(STATUS "EXPLICIT_ENV_PATH is ${EXPLICIT_ENV_PATH}")
 message(STATUS "FULL_STAGE2_LLVM is ${FULL_STAGE2_LLVM}")
-message(STATUS "ISPC_ANDROID_NDK_PATH is ${ISPC_ANDROID_NDK_PATH}")
 message(STATUS "ISPC_WINDOWS_SDK_PATH is ${ISPC_WINDOWS_SDK_PATH}")
 message(STATUS "ISPC_WINDOWS_VCTOOLS_PATH is ${ISPC_WINDOWS_VCTOOLS_PATH}")
 if (ISPC_SIGN_KEY STREQUAL "NO")
@@ -772,7 +770,6 @@ endif()
 if (WIN32)
     # XPU examples are not buildable on windows, issue: TODO!
     list(APPEND ISPC_COMMON_CMAKE_ARGS
-        -DISPC_GNUWIN32_PATH=${GNUWIN32}
         -DISPC_INCLUDE_EXAMPLES=OFF
         -DISPC_INCLUDE_XE_EXAMPLES=OFF
         )
@@ -788,7 +785,6 @@ if (NOT WIN32 AND ISPC_CROSS)
     list(APPEND ISPC_COMMON_CMAKE_ARGS
         -DISPC_WINDOWS_SDK_PATH=${ISPC_WINDOWS_SDK_PATH}
         -DISPC_WINDOWS_VCTOOLS_PATH=${ISPC_WINDOWS_VCTOOLS_PATH}
-        -DISPC_ANDROID_NDK_PATH=${ISPC_ANDROID_NDK_PATH}
     )
 endif()
 if (APPLE)

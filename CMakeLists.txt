@@ -162,8 +162,6 @@ endif()
 
 option(X86_ENABLED "Enable x86 support" ${X86_HOST})
 option(ARM_ENABLED "Enable ARM support" ${LLVM_SUPPORTS_ARM})
-# 32-bit ARM builtins are compiled against 32-bit ARM C library headers. Turn this
-# option off on systems that don't provide them, e.g. Termux on Android.
 # ARM32_ENABLED is OFF while ARM_ENABLED is OFF, without changing its cached value.
 include(CMakeDependentOption)
 cmake_dependent_option(ARM32_ENABLED "Enable 32-bit ARM support (requires ARM_ENABLED)" ON "ARM_ENABLED" OFF)
@@ -184,22 +182,10 @@ if (ISPC_CROSS)
     option(ISPC_IOS_TARGET "Build ISPC with ios target support" ON)
     option(ISPC_ANDROID_TARGET "Build ISPC with android target support" ON)
     option(ISPC_PS_TARGET "Build ISPC with ps4 and ps5 targets support" ON)
-    # Cross targets whose SDK or C library headers are not found are disabled.
+    # The Windows target is disabled if the Windows SDK is not found. The other targets
+    # do not need SDKs or C library headers.
     if (WIN32)
         set(ISPC_IOS_TARGET OFF)
-        # Linux, Android, FreeBSD and PS targets use the GNUWIN32 headers.
-        if ((ISPC_LINUX_TARGET OR ISPC_ANDROID_TARGET OR ISPC_FREEBSD_TARGET OR ISPC_PS_TARGET)
-            AND NOT ISPC_GNUWIN32_PATH)
-            message(STATUS "ISPC_GNUWIN32_PATH is not set, disabling Linux, Android, FreeBSD and PS targets")
-            set(ISPC_LINUX_TARGET OFF)
-            set(ISPC_ANDROID_TARGET OFF)
-            set(ISPC_FREEBSD_TARGET OFF)
-            set(ISPC_PS_TARGET OFF)
-        endif()
-        if (ISPC_MACOS_TARGET AND NOT ISPC_MACOS_SDK_PATH)
-            message(STATUS "ISPC_MACOS_SDK_PATH is not set, disabling macOS target")
-            set(ISPC_MACOS_TARGET OFF)
-        endif()
     elseif (APPLE)
         set(ISPC_MACOS_TARGET ON)
         if (ISPC_WINDOWS_TARGET AND (NOT ISPC_WINDOWS_SDK_PATH OR NOT ISPC_WINDOWS_VCTOOLS_PATH))
@@ -208,20 +194,6 @@ if (ISPC_CROSS)
         endif()
         set(ISPC_PS_TARGET OFF)
         set(ISPC_FREEBSD_TARGET OFF)
-        if (ISPC_IOS_TARGET AND NOT ISPC_IOS_SDK_PATH)
-            # Use standard iOS SDK location if this is not specified.
-            set(command "xcrun" "--show-sdk-path" "--sdk" "iphoneos")
-            execute_process(COMMAND ${command}
-                OUTPUT_VARIABLE ISPC_IOS_SDK_PATH
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            if (ISPC_IOS_SDK_PATH)
-                message(STATUS "Using iOS SDK path ${ISPC_IOS_SDK_PATH}")
-            else()
-                message(STATUS "iOS SDK is not found, disabling iOS target")
-                set(ISPC_IOS_TARGET OFF)
-            endif()
-        endif()
     else()
         if (ISPC_WINDOWS_TARGET AND (NOT ISPC_WINDOWS_SDK_PATH OR NOT ISPC_WINDOWS_VCTOOLS_PATH))
             message(STATUS "ISPC_WINDOWS_SDK_PATH or ISPC_WINDOWS_VCTOOLS_PATH is not set, disabling Windows target")
@@ -229,10 +201,6 @@ if (ISPC_CROSS)
         endif()
         set(ISPC_PS_TARGET OFF)
         set(ISPC_IOS_TARGET OFF)
-        if (ISPC_MACOS_TARGET AND NOT ISPC_MACOS_SDK_PATH)
-            message(STATUS "ISPC_MACOS_SDK_PATH is not set, disabling macOS target")
-            set(ISPC_MACOS_TARGET OFF)
-        endif()
     endif()
 else()
     if (WIN32)
@@ -245,30 +213,6 @@ else()
         set(ISPC_LINUX_TARGET ON)
     endif()
 endif()
-
-# Android targets, and Linux targets on macOS, use the C headers from the Android NDK.
-if (NOT WIN32 AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android"
-    AND ((ISPC_ANDROID_TARGET AND (X86_ENABLED OR ARM_ENABLED)) OR (APPLE AND ISPC_LINUX_TARGET)))
-    if (NOT ISPC_ANDROID_NDK_PATH)
-        # Use standard Android NDK location if this is not specified.
-        set(ISPC_ANDROID_NDK_PATH "$ENV{ANDROID_NDK_HOME}")
-    endif()
-    # Old NDKs have the headers in <NDK>/sysroot, new NDKs only in the toolchain sysroot.
-    file(GLOB ISPC_ANDROID_NDK_SYSROOT "${ISPC_ANDROID_NDK_PATH}/sysroot"
-        "${ISPC_ANDROID_NDK_PATH}/toolchains/llvm/prebuilt/*/sysroot")
-    if (ISPC_ANDROID_NDK_PATH AND ISPC_ANDROID_NDK_SYSROOT)
-        list(GET ISPC_ANDROID_NDK_SYSROOT 0 ISPC_ANDROID_NDK_SYSROOT)
-        message(STATUS "Using Android NDK sysroot ${ISPC_ANDROID_NDK_SYSROOT}")
-    elseif (APPLE)
-        message(STATUS "Android NDK is not found, disabling Android and Linux targets")
-        set(ISPC_ANDROID_TARGET OFF)
-        set(ISPC_LINUX_TARGET OFF)
-    else()
-        message(STATUS "Android NDK is not found, disabling Android target")
-        set(ISPC_ANDROID_TARGET OFF)
-    endif()
-endif()
-
 if (ISPC_LINUX_TARGET OR ISPC_ANDROID_TARGET OR ISPC_PS_TARGET
     OR ISPC_FREEBSD_TARGET OR ISPC_IOS_TARGET OR ISPC_MACOS_TARGET)
     set(ISPC_UNIX_TARGET ON)
@@ -337,6 +281,9 @@ if (ISPC_MACOS_TARGET AND ISPC_MACOS_SDK_PATH)
     else()
         message(STATUS "MacOS_SDK does NOT supports ARM (SDK ver < 11.0)")
     endif()
+elseif (ISPC_MACOS_TARGET)
+    # The macOS target does not need an SDK. Without one, assume macOS 11.0 or later.
+    set(ISPC_MACOS_ARM_TARGET ON)
 endif()
 
 # If Xe target is enabled, generate build targets for Xe examples and ISPCRT on Linux

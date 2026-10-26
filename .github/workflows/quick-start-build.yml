@@ -28,8 +28,7 @@ jobs:
     - name: Install prerequisites
       run: |
         sudo apt-get update
-        sudo apt-get install -y git curl cmake xz-utils m4 flex bison python3 libtbb-dev g++-multilib \
-          libc6-dev-armhf-cross libc6-dev-arm64-cross
+        sudo apt-get install -y git curl cmake xz-utils m4 flex bison python3 libtbb-dev g++-multilib
 
     - name: Build ISPC
       run: ./scripts/quick-start-build.py
@@ -54,12 +53,10 @@ jobs:
         pacman -Sy --noconfirm archlinux-keyring
         pacman-key --populate archlinux
         pacman -Su --noconfirm
-        pacman -S --noconfirm git cmake make gcc-libs glibc lib32-glibc gcc m4 flex bison python onetbb \
-          aarch64-linux-gnu-glibc
+        pacman -S --noconfirm git cmake make gcc-libs glibc lib32-glibc gcc m4 flex bison python onetbb
 
-    # Arch has no ARM32 glibc package, so build without 32-bit ARM support.
     - name: Build ISPC
-      run: ./scripts/quick-start-build.py -DARM32_ENABLED=OFF
+      run: ./scripts/quick-start-build.py
 
   macos:
     runs-on: macos-latest
