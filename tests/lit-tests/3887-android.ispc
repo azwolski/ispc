@@ -1,6 +1,6 @@
-// Verifies that the Android C builtins are not empty. They are compiled with the
-// Android NDK headers; if clang fails on them, __do_print and __num_cores are only
-// declared, and programs using print() and num_cores() fail to link.
+// Verifies that the Android C builtins are not empty: if clang fails on them,
+// __do_print and __num_cores are only declared, and programs using print() and
+// num_cores() fail to link.
 // See https://github.com/ispc/ispc/issues/3887
 
 // RUN: %{ispc} %s --arch=aarch64 --target=neon-i32x4 --target-os=android --nowrap --emit-llvm-text -o - | FileCheck %s

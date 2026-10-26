@@ -201,30 +201,24 @@ endfunction()
 function (get_target_flags os arch out)
     # Determine triple
     set(fpic "")
-    set(debian_triple)
     if (${os} STREQUAL "windows")
         set(triple ${arch}-pc-win32)
     elseif (${os} STREQUAL "linux")
         if (CMAKE_SYSTEM_NAME STREQUAL "Android")
             # ISPC that runs on Android (built natively in Termux or cross-compiled) targets
-            # Linux, but the C library is bionic. Use the Android triple, so clang picks up the
-            # bionic headers including the architecture specific ones (e.g. asm/types.h). The
-            # bionic headers reject unversioned triples; API level 24 is the one Termux targets.
+            # Linux, but the C library is bionic. Use the Android triple, so the builtins use
+            # the bionic values (see builtins/builtins-c-cpu.cpp).
             # 32-bit Android uses softfp, but the C builtin entry points have no floating-point
             # parameters, so this is compatible with the hard-float ABI of ISPC code.
-            set(triple ${arch}-unknown-linux-android24)
+            set(triple ${arch}-unknown-linux-android)
         elseif (${arch} STREQUAL "i686" OR ${arch} STREQUAL "x86_64" OR ${arch} STREQUAL "aarch64")
             set(triple ${arch}-unknown-linux-gnu)
-            set(debian_triple ${arch}-linux-gnu)
         elseif (${arch} STREQUAL "armv8a")
             set(triple ${arch}-unknown-linux-gnueabihf)
-            set(debian_triple arm-linux-gnueabihf)
         elseif (${arch} STREQUAL "riscv64")
             set(triple ${arch}-unknown-linux-gnu)
-            set(debian_triple ${arch}-linux-gnu)
         elseif (${arch} STREQUAL "ppc64le")
             set(triple powerpc64le-unknown-linux-gnu)
-            set(debian_triple powerpc64le-linux-gnu)
         else()
             message(FATAL_ERROR "Error")
         endif()
@@ -249,58 +243,16 @@ function (get_target_flags os arch out)
         message(FATAL_ERROR "Error")
     endif()
 
-    # Determine include path
-    if (${os} STREQUAL "windows" AND NOT WIN32)
-        set(include -isystem${ISPC_WINDOWS_VCTOOLS_PATH}/include -isystem${ISPC_WINDOWS_SDK_PATH}/include/ucrt)
-    elseif (NOT WIN32 AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Android"
-            AND (${os} STREQUAL "android" OR (APPLE AND ${os} STREQUAL "linux")))
-        # macOS has no Linux C library headers, so Linux targets use the NDK headers there too.
-        if (${arch} STREQUAL "armv8a")
-            set(ndk_arch arm-linux-androideabi)
-        else()
-            set(ndk_arch ${arch}-linux-android)
-        endif()
-        set(include --sysroot=${ISPC_ANDROID_NDK_SYSROOT} -isystem${ISPC_ANDROID_NDK_SYSROOT}/usr/include
-                    -isystem${ISPC_ANDROID_NDK_SYSROOT}/usr/include/${ndk_arch})
-    elseif (WIN32)
-        if (${os} STREQUAL "windows")
-            set(include "")
-        elseif(${os} STREQUAL "macos")
-            # -isystemC:/iusers/MacOSX10.14.sdk.tar/MacOSX10.14.sdk/usr/include
-            set(include -isystem${ISPC_MACOS_SDK_PATH}/usr/include)
-        else()
-            # -isystemC:/gnuwin32/include/glibc
-            set(include -isystem${ISPC_GNUWIN32_PATH}/include/glibc)
-        endif()
-    elseif (APPLE)
-        if (${os} STREQUAL "ios")
-            # -isystem/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/
-            set(include -isystem${ISPC_IOS_SDK_PATH}/usr/include)
-        elseif (${os} STREQUAL "macos")
-            set(include -isystem${ISPC_MACOS_SDK_PATH}/usr/include)
+    # Only the Windows target needs C headers (from the Windows SDK, if the host is not Windows).
+    # The other targets do not use the C library headers, see builtins/builtins-c-cpu.cpp, so
+    # the system headers are not searched. Clang's own headers (e.g. stdint.h) are still used.
+    set(include "")
+    if (${os} STREQUAL "windows")
+        if (NOT WIN32)
+            set(include -isystem${ISPC_WINDOWS_VCTOOLS_PATH}/include -isystem${ISPC_WINDOWS_SDK_PATH}/include/ucrt)
         endif()
     else()
-        if (${os} STREQUAL "macos")
-            # -isystem/iusers/MacOSX10.14.sdk.tar/MacOSX10.14.sdk/usr/include
-            set(include -isystem${ISPC_MACOS_SDK_PATH}/usr/include)
-        elseif(NOT ${debian_triple} STREQUAL "")
-            # When compiling on Linux, there are two way to support cross targets:
-            # - add "foreign" architecture to the set of supported architectures and install corresponding toolchain.
-            #   For example on aarch64: "dpkg --add-architecture armhf" and "apt-get install libc6-dev:armhf".
-            #   In this case the headers will be installed in /usr/include/arm-linux-gnueabihf and will be
-            #   automatically picked up by clang.
-            # - install cross library. For example: "apt-get install libc6-dev-armhf-cross".
-            #   In this case headers will be installed in /usr/arm-linux-gnueabihf/include and will not be picked up
-            #   by clang by default. So the following line adds such path explicitly. If this path doesn't exist and
-            #   the headers can be found in other locations, this should not be a problem.
-            if (${debian_triple} STREQUAL "riscv64-linux-gnu" AND NOT CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "riscv64")
-                # RISC-V cross-compilation requires sysroot to avoid host system headers with unsupported features like __float128
-                # Only needed when cross-compiling (host != target), not for native RISC-V builds
-                set(include --sysroot=/usr/${debian_triple})
-            else()
-                set(include -isystem/usr/${debian_triple}/include)
-            endif()
-        endif()
+        set(include -nostdlibinc)
     endif()
 
     # Compose target flags
