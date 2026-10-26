@@ -187,14 +187,16 @@ if (ISPC_CROSS)
     # Cross targets whose SDK or C library headers are not found are disabled.
     if (WIN32)
         set(ISPC_IOS_TARGET OFF)
-        # Linux, Android, FreeBSD and PS targets use the GNUWIN32 headers.
+        # Linux, Android, FreeBSD and PS targets use the GNUWIN32 headers. The macOS target
+        # needs the Linux target here, because the Unix stdlib is built with --target-os=linux.
         if ((ISPC_LINUX_TARGET OR ISPC_ANDROID_TARGET OR ISPC_FREEBSD_TARGET OR ISPC_PS_TARGET)
             AND NOT ISPC_GNUWIN32_PATH)
-            message(STATUS "ISPC_GNUWIN32_PATH is not set, disabling Linux, Android, FreeBSD and PS targets")
+            message(STATUS "ISPC_GNUWIN32_PATH is not set, disabling Linux, Android, FreeBSD, PS and macOS targets")
             set(ISPC_LINUX_TARGET OFF)
             set(ISPC_ANDROID_TARGET OFF)
             set(ISPC_FREEBSD_TARGET OFF)
             set(ISPC_PS_TARGET OFF)
+            set(ISPC_MACOS_TARGET OFF)
         endif()
         if (ISPC_MACOS_TARGET AND NOT ISPC_MACOS_SDK_PATH)
             message(STATUS "ISPC_MACOS_SDK_PATH is not set, disabling macOS target")
