@@ -172,6 +172,14 @@ option(WASM_ENABLED "Enable experimental Web Assembly support" OFF)
 option(XE_ENABLED "Enable Intel Xe support" OFF)
 
 option(ISPC_CROSS "Build ISPC with cross compilation support" OFF)
+
+# A target whose SDK path is not given is disabled. A path that is given must exist.
+function(check_sdk_path var)
+    if (${var} AND NOT IS_DIRECTORY "${${var}}")
+        message(FATAL_ERROR "${var} is set to ${${var}}, which is not a directory")
+    endif()
+endfunction()
+
 # Default settings for cross compilation
 if (ISPC_CROSS)
     option(ISPC_WINDOWS_TARGET "Build ISPC with windows target support" ON)
@@ -182,12 +190,14 @@ if (ISPC_CROSS)
     option(ISPC_IOS_TARGET "Build ISPC with ios target support" ON)
     option(ISPC_ANDROID_TARGET "Build ISPC with android target support" ON)
     option(ISPC_PS_TARGET "Build ISPC with ps4 and ps5 targets support" ON)
-    # The Windows target is disabled if the Windows SDK is not found. The other targets
+    # The Windows target is disabled if the Windows SDK is not given. The other targets
     # do not need SDKs or C library headers.
     if (WIN32)
         set(ISPC_IOS_TARGET OFF)
     elseif (APPLE)
         set(ISPC_MACOS_TARGET ON)
+        check_sdk_path(ISPC_WINDOWS_SDK_PATH)
+        check_sdk_path(ISPC_WINDOWS_VCTOOLS_PATH)
         if (ISPC_WINDOWS_TARGET AND (NOT ISPC_WINDOWS_SDK_PATH OR NOT ISPC_WINDOWS_VCTOOLS_PATH))
             message(STATUS "ISPC_WINDOWS_SDK_PATH or ISPC_WINDOWS_VCTOOLS_PATH is not set, disabling Windows target")
             set(ISPC_WINDOWS_TARGET OFF)
@@ -195,6 +205,8 @@ if (ISPC_CROSS)
         set(ISPC_PS_TARGET OFF)
         set(ISPC_FREEBSD_TARGET OFF)
     else()
+        check_sdk_path(ISPC_WINDOWS_SDK_PATH)
+        check_sdk_path(ISPC_WINDOWS_VCTOOLS_PATH)
         if (ISPC_WINDOWS_TARGET AND (NOT ISPC_WINDOWS_SDK_PATH OR NOT ISPC_WINDOWS_VCTOOLS_PATH))
             message(STATUS "ISPC_WINDOWS_SDK_PATH or ISPC_WINDOWS_VCTOOLS_PATH is not set, disabling Windows target")
             set(ISPC_WINDOWS_TARGET OFF)
@@ -220,6 +232,7 @@ else()
     set(ISPC_UNIX_TARGET OFF)
 endif()
 
+check_sdk_path(ISPC_MACOS_SDK_PATH)
 if (APPLE)
     # Use standard macOS SDK location if this is not specified.
     if (NOT ISPC_MACOS_SDK_PATH)
