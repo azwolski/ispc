@@ -139,8 +139,7 @@ platforms, please refer to our
 [ISPC Development Guide](https://github.com/ispc/ispc/wiki/ISPC-Development-Guide)
 for build and test instructions.
 
-Each enabled target needs the C library headers of its OS and architecture.
-On Linux, these targets need extra packages:
+On Linux, Linux and FreeBSD targets need these C library packages:
 
 - 32-bit x86, required on x86 hosts: `libc6-dev-i386` on Debian/Ubuntu,
   `glibc-devel.i686` on Fedora, `lib32-glibc` (multilib) on Arch Linux.
@@ -159,7 +158,7 @@ the SDK is not found, its targets are disabled:
 - macOS on Linux and Windows, with `-DISPC_MACOS_TARGET=ON`:
   `-DISPC_MACOS_SDK_PATH`.
 - iOS on macOS: `-DISPC_IOS_SDK_PATH`, or the iOS SDK found by `xcrun`.
-- Linux, Android, FreeBSD and PS on Windows: `-DISPC_GNUWIN32_PATH`.
+- Linux, Android, FreeBSD, PS and macOS on Windows: `-DISPC_GNUWIN32_PATH`.
 
 Native Termux builds use the installed bionic headers.
 
