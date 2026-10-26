@@ -503,19 +503,19 @@ Examples:
         configure_cmd = [
             "cmake",
             "-B", str(build_dir),
-            str(ispc_root),
-            f"-DCMAKE_BUILD_TYPE={build_type}",
-            "-DISPC_SLIM_BINARY=ON",
-            *cmake_args
+            str(ispc_root)
         ]
-        print("Configure build of ISPC")
-        # Delete the build directory on failure only if this run created it.
         on_error = None
         if create_build_dir:
+            # Pass the defaults only here, so that configuring again keeps earlier values.
+            configure_cmd += [f"-DCMAKE_BUILD_TYPE={build_type}", "-DISPC_SLIM_BINARY=ON"]
+            # Delete the build directory on failure only if this run created it.
             on_error = lambda: (
                 print(f"CMake failed, cleaning up build directory {build_dir}"),
                 shutil.rmtree(build_dir)
                 )
+        configure_cmd += cmake_args
+        print("Configure build of ISPC")
         run_command(configure_cmd, on_error, env=env)
     else:
         print(f"{build_dir} already exists")
