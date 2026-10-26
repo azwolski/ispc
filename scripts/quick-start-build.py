@@ -422,7 +422,7 @@ Examples:
   # Build with specific LLVM version
   $ python quick-start-build.py 19
 
-  # Build with extra CMake options (used only when the build directory is created)
+  # Build with extra CMake options (an existing build directory is configured again)
   $ python quick-start-build.py -DARM32_ENABLED=OFF
 
   # Build with custom LLVM location
@@ -494,7 +494,9 @@ Examples:
         print(f"{llvm_dir} already exists")
 
     build_type = "RelWithDebInfo" if is_windows else "Debug"
-    if not build_dir.exists():
+    # An existing build directory is configured again only when new CMake options are given.
+    create_build_dir = not build_dir.exists()
+    if create_build_dir or cmake_args:
         env = os.environ.copy()
         env["PATH"] = f"{llvm_dir / 'bin'}{os.pathsep}{env['PATH']}"
 
@@ -507,12 +509,14 @@ Examples:
             *cmake_args
         ]
         print("Configure build of ISPC")
-        run_command(configure_cmd,
-                    lambda: (
-                        print(f"CMake failed, cleaning up build directory {build_dir}"),
-                        shutil.rmtree(build_dir)
-                        ),
-                    env=env)
+        # Delete the build directory on failure only if this run created it.
+        on_error = None
+        if create_build_dir:
+            on_error = lambda: (
+                print(f"CMake failed, cleaning up build directory {build_dir}"),
+                shutil.rmtree(build_dir)
+                )
+        run_command(configure_cmd, on_error, env=env)
     else:
         print(f"{build_dir} already exists")
 
