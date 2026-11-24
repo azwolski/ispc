@@ -284,24 +284,24 @@ static llvm::Value *lExtract248Scale(llvm::Value *splatOperand, int splatValue, 
     return LLVMInt32(1);
 }
 
-/** The scale extraction of lExtractOffsetVector248Scale() for the operand of
-    a zext: zext(x * s) is zext(x) * s only if x * s doesn't wrap, so only a
-    nuw shl by 1, 2 or 3 or a nuw multiply by 2, 4 or 8 is looked through,
-    without recursion or a partial scale. InstCombine turns the multiply of an
-    unsigned index by the element size into a shl.
+/** Extract a positive hardware scale across a zero extension only when the
+    index arithmetic cannot wrap. For a nonnegative product, nsw also proves
+    the unscaled operand is nonnegative. Leave shifts under zext nneg intact
+    so subsequent load/store folding can use their original wrap flags.
  */
-static llvm::Value *lExtractNUWScale(llvm::Value **vec) {
+static llvm::Value *lExtractZExtScale(llvm::Value **vec, bool nonnegative) {
     llvm::BinaryOperator *bop = llvm::dyn_cast<llvm::BinaryOperator>(*vec);
     if (bop == nullptr) {
         return LLVMInt32(1);
     }
+    const bool noWrap = bop->hasNoUnsignedWrap() || (nonnegative && bop->hasNoSignedWrap());
     int splat = 0;
     if (bop->getOpcode() == llvm::Instruction::Shl) {
-        if (bop->hasNoUnsignedWrap() && lIsIntegerSplat(bop->getOperand(1), &splat) && splat >= 1 && splat <= 3) {
+        if (!nonnegative && noWrap && lIsIntegerSplat(bop->getOperand(1), &splat) && splat >= 1 && splat <= 3) {
             *vec = bop->getOperand(0);
             return LLVMInt32(1 << splat);
         }
-    } else if (bop->getOpcode() == llvm::Instruction::Mul && bop->hasNoUnsignedWrap()) {
+    } else if (bop->getOpcode() == llvm::Instruction::Mul && noWrap) {
         for (int i = 0; i < 2; ++i) {
             if (lIsIntegerSplat(bop->getOperand(i), &splat) && (splat == 2 || splat == 4 || splat == 8)) {
                 *vec = bop->getOperand(1 - i);
@@ -332,11 +332,9 @@ static llvm::Value *lExtractOffsetVector248Scale(llvm::Value **vec) {
     if (cast != nullptr) {
         llvm::Value *castOp = cast->getOperand(0);
         llvm::Value *scale = nullptr;
-        if (cast->getOpcode() == llvm::Instruction::ZExt && !cast->hasNonNeg()) {
-            // zext(x * s) is zext(x) * s only if x * s doesn't wrap.
-            scale = lExtractNUWScale(&castOp);
+        if (cast->getOpcode() == llvm::Instruction::ZExt) {
+            scale = lExtractZExtScale(&castOp, cast->hasNonNeg());
         } else {
-            // Check the cast target. A zext nneg is handled like a sext.
             scale = lExtractOffsetVector248Scale(&castOp);
         }
         if (scale == nullptr) {
@@ -348,8 +346,6 @@ static llvm::Value *lExtractOffsetVector248Scale(llvm::Value **vec) {
         llvm::CastInst *newCast = llvm::CastInst::Create(cast->getOpcode(), castOp, cast->getType(), "offset_cast",
                                                          ISPC_INSERTION_POINT_INSTRUCTION(cast));
         if (cast->getOpcode() == llvm::Instruction::ZExt) {
-            // Like for a sext, x * s is assumed not to overflow as a signed
-            // value, so x is non-negative, too.
             newCast->setNonNeg(cast->hasNonNeg());
         }
         *vec = newCast;
@@ -514,10 +510,15 @@ static bool lOffsets32BitSafe(llvm::Value **offsetPtr, llvm::Instruction *insert
         return true;
     }
 
-    llvm::SExtInst *sext = llvm::dyn_cast<llvm::SExtInst>(offset);
-    if (sext != nullptr && sext->getOperand(0)->getType() == LLVMTypes::Int32VectorType) {
-        // sext of a 32-bit vector -> the 32-bit vector is good
-        *offsetPtr = sext->getOperand(0);
+    // The 32-bit native forms sign extend their index before applying the
+    // hardware scale. A zext nneg has the same value as a sext on every
+    // defined lane.
+    auto *cast = llvm::dyn_cast<llvm::CastInst>(offset);
+    if (cast != nullptr &&
+        (cast->getOpcode() == llvm::Instruction::SExt ||
+         (cast->getOpcode() == llvm::Instruction::ZExt && cast->hasNonNeg())) &&
+        cast->getOperand(0)->getType() == LLVMTypes::Int32VectorType) {
+        *offsetPtr = cast->getOperand(0);
         return true;
     } else if (lIs32BitSafeHelper(offset)) {
         // The only constant vector we should have here is a vector of
