@@ -602,9 +602,14 @@ void ispc::Optimize(llvm::Module *module, int optLevel) {
         // so this pass is temporary disabled for Xe.
         if (!g->target->isXeTarget()) {
             optPM.addLoopPass(llvm::LoopIdiomRecognizePass());
+            // Simplify the exit value once idiom recognition removes the copy from the loop body.
+            // Use a separate phase ID and keep deletion (299) and unrolling (300) independently selectable.
+            optPM.addLoopPass(llvm::IndVarSimplifyPass(), 390);
+            optPM.addLoopPass(llvm::LoopDeletionPass(), 299);
+        } else {
+            optPM.addLoopPass(llvm::LoopDeletionPass());
         }
 
-        optPM.addLoopPass(llvm::LoopDeletionPass());
         optPM.commitLoopToFunctionPassManager();
 
         if (g->opt.unrollLoops) {
