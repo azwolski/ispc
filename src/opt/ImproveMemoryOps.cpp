@@ -10,6 +10,7 @@
 
 #include <llvm/Analysis/ConstantFolding.h>
 #include <llvm/Analysis/VectorUtils.h>
+#include <llvm/IR/IRBuilder.h>
 
 namespace ispc {
 
@@ -1394,6 +1395,113 @@ static llvm::Value *lEmitUnmasked(const MemoryAccess &access, const MemoryPlan &
     return load;
 }
 
+// The gather's single pointer operand can retain its noalias and capture
+// annotations after rebasing. Reject other operand contracts and special calls.
+static bool lSupportsPackedGatherABI(const llvm::Function *callee) {
+    const auto attrs = callee->getAttributes();
+    if (callee->getCallingConv() != llvm::CallingConv::C || attrs.hasRetAttrs() ||
+        callee->hasFnAttribute(llvm::Attribute::Convergent) || callee->hasFnAttribute(llvm::Attribute::ReturnsTwice) ||
+        callee->hasFnAttribute(llvm::Attribute::NoDuplicate) || callee->hasFnAttribute(llvm::Attribute::NoReturn)) {
+        return false;
+    }
+    for (unsigned i = 1; i < callee->arg_size(); ++i) {
+        if (attrs.hasParamAttrs(i)) {
+            return false;
+        }
+    }
+    return llvm::all_of(attrs.getParamAttrs(0), [](llvm::Attribute attr) {
+        if (attr.hasAttribute(llvm::Attribute::NoAlias)) {
+            return true;
+        }
+#if ISPC_LLVM_VERSION >= ISPC_LLVM_21_0
+        return attr.hasAttribute(llvm::Attribute::Captures) && attr.getCaptureInfo() == llvm::CaptureInfo::none();
+#else
+        return attr.hasAttribute(llvm::Attribute::NoCapture);
+#endif
+    });
+}
+
+// For the packed x8 shape, separate the unsigned gang displacement from the small signed lane indices.
+static std::optional<MemoryPlan> lPlanNarrowPackedFloatGather(const MemoryAccess &access) {
+    using namespace llvm;
+    if (!access.isPseudo() || access.kind() != MemoryOpKind::Gather || access.form() != MemoryOpForm::BaseOffsets ||
+        access.element() != MemoryElement::Float || access.offsetBits() != 64 || access.laneCount() != 8 ||
+        access.mask()->getType() != LLVMTypes::MaskType || access.maskStatus() != MaskStatus::all_on ||
+        g->target->getVectorWidth() != 8 || g->target->getArch() != Arch::x86_64 ||
+        g->target->getISA() != Target::NVL_AVX10_2 || !g->target->useGather() || !g->opt.force32BitAddressing ||
+        access.base()->getType()->getPointerAddressSpace() != 0 || access.call->hasOperandBundles() ||
+        access.call->isMustTailCall() || access.call->isNoTailCall() || !access.call->getAttributes().isEmpty() ||
+        access.call->getCallingConv() != llvm::CallingConv::C ||
+        !lSupportsPackedGatherABI(access.call->getCalledFunction())) {
+        return std::nullopt;
+    }
+    auto *scale = dyn_cast<ConstantInt>(access.scale());
+    auto *extension = dyn_cast<ZExtInst>(access.offsets());
+    if (!scale || !scale->isOne() || !extension || extension->getSrcTy() != LLVMTypes::Int32VectorType) {
+        return std::nullopt;
+    }
+    Value *offsets = extension->getOperand(0);
+    unsigned field = 0;
+    if (auto *fieldOr = dyn_cast<PossiblyDisjointInst>(offsets);
+        fieldOr && fieldOr->getOpcode() == Instruction::Or && fieldOr->isDisjoint()) {
+        auto *constant = dyn_cast<Constant>(fieldOr->getOperand(1));
+        auto *value = constant ? dyn_cast_or_null<ConstantInt>(constant->getSplatValue()) : nullptr;
+        if (!value || (value->getZExtValue() != 4 && value->getZExtValue() != 8 && value->getZExtValue() != 12)) {
+            return std::nullopt;
+        }
+        field = value->getZExtValue();
+        offsets = fieldOr->getOperand(0);
+    }
+    auto *shift = dyn_cast<BinaryOperator>(offsets);
+    if (!shift || shift->getOpcode() != Instruction::Shl) {
+        return std::nullopt;
+    }
+    auto *amount = dyn_cast<Constant>(shift->getOperand(1));
+    auto *bits = amount ? dyn_cast_or_null<ConstantInt>(amount->getSplatValue()) : nullptr;
+    auto *lanesOr = dyn_cast<PossiblyDisjointInst>(shift->getOperand(0));
+    if (!bits || !bits->equalsInt(4) || !lanesOr || lanesOr->getOpcode() != Instruction::Or || !lanesOr->isDisjoint()) {
+        return std::nullopt;
+    }
+    auto *splat = dyn_cast<ShuffleVectorInst>(lanesOr->getOperand(0));
+    auto *lanes = dyn_cast<Constant>(lanesOr->getOperand(1));
+    if (!splat || !llvm::all_of(splat->getShuffleMask(), [](int index) { return index == 0; }) || !lanes) {
+        return std::nullopt;
+    }
+    SmallVector<Constant *, 8> byteOffsets;
+    for (unsigned lane = 0; lane < 8; ++lane) {
+        auto *value = dyn_cast_or_null<ConstantInt>(lanes->getAggregateElement(lane));
+        if (!value || !value->equalsInt(lane)) {
+            return std::nullopt;
+        }
+        byteOffsets.push_back(LLVMInt32(16 * lane + field));
+    }
+    MemoryOpKey narrowed = access.op->key;
+    narrowed.offsetBits = 32;
+    const auto *op = FindMemoryOp(narrowed);
+    auto *callee = GetMemoryOpFunction(access.call->getModule(), narrowed);
+    if (!op || !callee || !HasMemoryOpSignature(*op, callee->getFunctionType()) || !lSupportsPackedGatherABI(callee) ||
+        callee->getFunctionType()->getParamType(0) != access.base()->getType() ||
+        callee->getFunctionType()->getParamType(3) != access.mask()->getType() ||
+        callee->getReturnType() != access.call->getType()) {
+        return std::nullopt;
+    }
+
+    // In defined executions the disjoint lane OR reserves three low counter bits.
+    // Lane zero after the shift is 128-byte aligned in i32. Adding at most 124 bytes
+    // cannot wrap in i32, so zero extension can move before the lane addition.
+    IRBuilder<> builder(access.call);
+    Value *laneZero = builder.CreateExtractElement(shift, uint64_t{0}, "packed.gang.offset");
+    Value *origin = builder.CreateZExt(laneZero, builder.getInt64Ty(), "packed.gang.offset64");
+    Value *base = builder.CreateGEP(builder.getInt8Ty(), access.base(), origin, "packed.gang.base");
+    MemoryPlan plan(PlanShape::BasedForm, "narrow-packed-float-gather");
+    plan.op = op;
+    plan.function = callee;
+    plan.base = base;
+    plan.scale = scale;
+    plan.offsets = ConstantVector::get(byteOffsets);
+    return plan;
+}
+
 /** The plan of the first of the rules below that has one for the access. */
 static std::optional<MemoryPlan> lPlanAccess(const MemoryAccess &access) {
     if (std::optional<MemoryPlan> plan = lPlanBasedForm(access)) {
@@ -1403,6 +1511,9 @@ static std::optional<MemoryPlan> lPlanAccess(const MemoryAccess &access) {
         return plan;
     }
     if (std::optional<MemoryPlan> plan = lPlanLoadStore(access)) {
+        return plan;
+    }
+    if (std::optional<MemoryPlan> plan = lPlanNarrowPackedFloatGather(access)) {
         return plan;
     }
     if (std::optional<MemoryPlan> plan = lPlanMaskedStore(access)) {
