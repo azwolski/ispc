@@ -43,14 +43,13 @@
 // A64-NOT: call {{.*}}@[[GD]](
 G(g_s8, int8)
 
-// Unsigned 8- and 16-bit indices are qword in both modes today: InstCombine
-// turns the offset into `zext nneg`, but native-index narrowing currently
-// accepts sext rather than proving that this zext has the same signed value.
-// TODO(#1581): use dword indices in both modes; the byte offset is below 2^18.
+// The byte offsets for unsigned 8- and 16-bit indices fit in signed i32.
+// With --addressing=32, the native forms can use the operand of zext nneg.
+// TODO(#1581): also select dword indices with --addressing=64.
 // A32-LABEL: @g_u8___
-// A32-NOT: call {{.*}}@[[GD]](
-// A32: call {{.*}}@[[GQ]](
-// A32-NOT: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
+// A32: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
 // A64-LABEL: @g_u8___
 // A64-NOT: call {{.*}}@[[GD]](
 // A64: call {{.*}}@[[GQ]](
@@ -68,11 +67,11 @@ G(g_u8, uint8)
 // A64-NOT: call {{.*}}@[[GD]](
 G(g_s16, int16)
 
-// TODO(#1581): use dword indices in both modes, as for g_u8.
+// TODO(#1581): use dword indices with --addressing=64, as for g_u8.
 // A32-LABEL: @g_u16___
-// A32-NOT: call {{.*}}@[[GD]](
-// A32: call {{.*}}@[[GQ]](
-// A32-NOT: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
+// A32: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
 // A64-LABEL: @g_u16___
 // A64-NOT: call {{.*}}@[[GD]](
 // A64: call {{.*}}@[[GQ]](
@@ -126,13 +125,12 @@ G(g_s64, int64)
 // A64-NOT: call {{.*}}@[[GD]](
 G(g_u64, uint64)
 
-// The #1531 noise pattern: a masked int index is qword for the same reason as
-// the unsigned 8- and 16-bit indices.
-// TODO(#1531): use the & 255 bound to select dword indices in both modes.
+// The & 255 bound also gives a nonnegative i32 byte offset.
+// TODO(#1531): use the bound with --addressing=64 too.
 // A32-LABEL: @g_and255___
-// A32-NOT: call {{.*}}@[[GD]](
-// A32: call {{.*}}@[[GQ]](
-// A32-NOT: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
+// A32: call {{.*}}@[[GD]](
+// A32-NOT: call {{.*}}@[[GQ]](
 // A64-LABEL: @g_and255___
 // A64-NOT: call {{.*}}@[[GD]](
 // A64: call {{.*}}@[[GQ]](
@@ -231,9 +229,9 @@ void big_const(uniform float p[], uniform float r[]) {
 S(s_s8, int8)
 
 // A32-LABEL: @s_u8___
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
-// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
+// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
 // A64-LABEL: @s_u8___
 // SKX64-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
 // SKX64: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
@@ -251,9 +249,9 @@ S(s_u8, uint8)
 S(s_s16, int16)
 
 // A32-LABEL: @s_u16___
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
-// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
+// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
 // A64-LABEL: @s_u16___
 // SKX64-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
 // SKX64: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
@@ -303,9 +301,9 @@ S(s_u64, uint64)
 // The #1531 noise pattern as a scatter.
 // TODO(#1531): use the & 255 bound to select dword indices in both modes.
 // A32-LABEL: @s_and255___
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
-// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
-// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
+// SKX32: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
+// SKX32-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
 // A64-LABEL: @s_and255___
 // SKX64-NOT: call {{.*}}@llvm.x86.avx512.mask.scatter.dps.512(
 // SKX64: call {{.*}}@llvm.x86.avx512.mask.scatter.qps.512(
@@ -315,18 +313,17 @@ void s_and255(uniform float *uniform base, uniform int *uniform idx, uniform flo
     base[i] = val[programIndex];
 }
 
-// Original reproducer from #1581 (the 16-byte Vecf4 record): avx2-i32x8
-// emits 8 vgatherqps for each unsigned index type.
-// TODO(#1581): use 4 vgatherdps for the bounded uint16 index. Keep the uint32
-// case subject to the range requirements described at g_u32.
+// Original reproducer from #1581 (the 16-byte Vecf4 record). The first
+// gather can use the directly nonnegative byte offset for uint16. The
+// other fields still use wide indices. Keep the uint32 case subject to
+// the range requirements described at g_u32.
 // A32-LABEL: @ShotgunGatherScatterTest32___
 // A32-NOT: call {{.*}}@[[GD]](
 // A32: call {{.*}}@[[GQ]](
 // A32-NOT: call {{.*}}@[[GD]](
 // A32-LABEL: @ShotgunGatherScatterTest16___
-// A32-NOT: call {{.*}}@[[GD]](
+// A32: call {{.*}}@[[GD]](
 // A32: call {{.*}}@[[GQ]](
-// A32-NOT: call {{.*}}@[[GD]](
 typedef float<4> Vecf4;
 
 unmasked void ShotgunGatherScatterTest32(uniform Vecf4 *uniform points, uniform unsigned int32 *uniform indices,
