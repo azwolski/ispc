@@ -7,6 +7,7 @@
 #include "ScalarizePass.h"
 #include "builtins-decl.h"
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Transforms/Utils/Local.h"
 
@@ -86,35 +87,67 @@ static llvm::Value *lScalarizeComputedByteOffset(llvm::Value *indices, uint64_t 
     return builder.CreateOr(insert->getOperand(1), offset);
 }
 
-// Recover a scalar address for an ordinary byte load from computed offsets.
-static llvm::Value *lScalarizeByteGatherIndex(llvm::Instruction *inst, unsigned width) {
-    auto *extract = llvm::dyn_cast<llvm::ExtractElementInst>(inst);
-    if (!extract || !extract->hasOneUse() || !llvm::isa<llvm::ConstantInt>(extract->getIndexOperand())) {
+static llvm::ConstantInt *lMatchByteGatherLane(llvm::ExtractElementInst *extract, llvm::ZExtInst *extend,
+                                               unsigned width) {
+    auto *lane = llvm::dyn_cast<llvm::ConstantInt>(extract->getIndexOperand());
+    if (!lane || lane->getValue().uge(width) || !extract->hasOneUse()) {
         return nullptr;
     }
-    auto *extend = llvm::dyn_cast<llvm::ZExtInst>(extract->getVectorOperand());
     auto *address = llvm::dyn_cast<llvm::GetElementPtrInst>(*extract->user_begin());
-    if (!extend || !address || !address->getSourceElementType()->isIntegerTy(8) || !address->hasOneUse() ||
+    if (!address || !address->getSourceElementType()->isIntegerTy(8) || !address->hasOneUse() ||
         !extract->getType()->isIntegerTy(64)) {
         return nullptr;
     }
     auto *indices = extend->getOperand(0);
     auto *byte = llvm::dyn_cast<llvm::LoadInst>(*address->user_begin());
     if (!byte || !byte->isSimple() || byte->getPointerOperand() != address || !byte->getType()->isIntegerTy(8) ||
-        indices->getType() != llvm::FixedVectorType::get(llvm::Type::getInt32Ty(inst->getContext()), width)) {
+        indices->getType() != llvm::FixedVectorType::get(llvm::Type::getInt32Ty(extract->getContext()), width)) {
         return nullptr;
     }
+    return lane;
+}
 
-    auto *lane = llvm::cast<llvm::ConstantInt>(extract->getIndexOperand());
-    if (lane->getValue().uge(width)) {
+// Recover a scalar address for an ordinary byte load from computed offsets.
+static llvm::Value *lScalarizeByteGatherIndex(llvm::Instruction *inst, unsigned width) {
+    auto *extract = llvm::dyn_cast<llvm::ExtractElementInst>(inst);
+    auto *extend = extract ? llvm::dyn_cast<llvm::ZExtInst>(extract->getVectorOperand()) : nullptr;
+    auto *lane = extend ? lMatchByteGatherLane(extract, extend, width) : nullptr;
+    if (!lane) {
         return nullptr;
     }
     llvm::IRBuilder<> builder(extract);
-    auto *index = lScalarizeComputedByteOffset(indices, lane->getZExtValue(), builder);
+    auto *index = lScalarizeComputedByteOffset(extend->getOperand(0), lane->getZExtValue(), builder);
     if (!index) {
         return nullptr;
     }
     return builder.CreateZExt(index, extract->getType(), "", extend->hasNonNeg());
+}
+
+static bool lScalarizeLoadedByteGatherIndices(llvm::ZExtInst *extend, unsigned width) {
+    auto *indices = llvm::cast<llvm::LoadInst>(extend->getOperand(0));
+    if (!indices->isSimple() || !indices->hasOneUse() || extend->use_empty()) {
+        return false;
+    }
+
+    // A surviving vector use can keep the vector load and add scalar reloads.
+    llvm::SmallVector<llvm::ExtractElementInst *, 16> extracts;
+    for (auto *user : extend->users()) {
+        auto *extract = llvm::dyn_cast<llvm::ExtractElementInst>(user);
+        if (!extract || !lMatchByteGatherLane(extract, extend, width)) {
+            return false;
+        }
+        extracts.push_back(extract);
+    }
+
+    for (auto *extract : extracts) {
+        llvm::IRBuilder<> builder(extract);
+        auto *index = builder.CreateExtractElement(indices, extract->getIndexOperand());
+        auto *wide = builder.CreateZExt(index, extract->getType(), "", extend->hasNonNeg());
+        extract->replaceAllUsesWith(wide);
+        extract->eraseFromParent();
+    }
+    extend->eraseFromParent();
+    return true;
 }
 
 bool ScalarizePass::matchAndReplace(llvm::BasicBlock &bb) {
@@ -151,6 +184,26 @@ llvm::PreservedAnalyses ScalarizePass::run(llvm::Function &F, llvm::FunctionAnal
     for (llvm::BasicBlock &BB : F) {
         modifiedAny |= matchAndReplace(BB);
     }
+
+    if (g && g->target && g->target->getISA() == Target::NVL_AVX10_2) {
+        unsigned width = g->target->getVectorWidth();
+        if (width == 4 || width == 8 || width == 16) {
+            // Collect first because a use group may span multiple basic blocks.
+            llvm::SmallVector<llvm::ZExtInst *, 4> loadedExtends;
+            for (auto &bb : F) {
+                for (auto &inst : bb) {
+                    auto *extend = llvm::dyn_cast<llvm::ZExtInst>(&inst);
+                    if (extend && llvm::isa<llvm::LoadInst>(extend->getOperand(0))) {
+                        loadedExtends.push_back(extend);
+                    }
+                }
+            }
+            for (auto *extend : loadedExtends) {
+                modifiedAny |= lScalarizeLoadedByteGatherIndices(extend, width);
+            }
+        }
+    }
+
     if (!modifiedAny) {
         // No changes, all analyses are preserved.
         return llvm::PreservedAnalyses::all();
